@@ -384,16 +384,3 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 - **[Mermaid](https://mermaid-js.github.io/)** for beautiful diagram rendering
 - **[FastAPI](https://fastapi.tiangolo.com/)** for the excellent Python web framework
 
----
-
-## 📧 Contact
-
-**Developer**: Shubh Ravat  
-**GitHub**: [@RavatShubh](https://github.com/RavatShubh)  
-**Project Link**: [https://github.com/RavatShubh/GitGen-AI---Full-Stack-Documentation-Generator](https://github.com/RavatShubh/GitGen-AI---Full-Stack-Documentation-Generator)
-
----
-
-## 🌟 Star this repository if you find it useful!
-
-Made with ❤️ by Shubh Ravat
