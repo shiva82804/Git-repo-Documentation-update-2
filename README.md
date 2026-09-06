@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🚀 GitGen AI - Full-Stack Documentation Generator
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
@@ -398,6 +397,3 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 ## 🌟 Star this repository if you find it useful!
 
 Made with ❤️ by Shubh Ravat
-=======
-# Git-repo-Documentation-update-2
->>>>>>> bc4ef28b24809c9969144f21c06b7eddbce0f284
