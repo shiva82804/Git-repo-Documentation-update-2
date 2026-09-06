@@ -369,13 +369,6 @@ Contributions are welcome! Here's how you can help:
 - Docker containerization
 - CI/CD pipeline setup
 
----
-
-## 📄 License
-
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
-
----
 
 ## 🙏 Acknowledgments
 
