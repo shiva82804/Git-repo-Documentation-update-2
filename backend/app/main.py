@@ -47,12 +47,13 @@ async def websocket_endpoint(websocket: WebSocket):
         data = await websocket.receive_text()
         repo_data = json.loads(data)
         repo_url = repo_data.get("repo_url")
+        diagram_types = repo_data.get("diagram_types")
         if not repo_url:
             await websocket.send_json({"type": "error", "message": "Missing repo_url"})
             return
 
         final_state = {}
-        async for event in run_agent_streaming(repo_url):
+        async for event in run_agent_streaming(repo_url, diagram_types):
             await websocket.send_json(event)
             if event.get("type") == "complete":
                 final_state = {

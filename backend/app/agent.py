@@ -109,7 +109,8 @@ async def analyze_code(state: AgentState):
 - "classes": list of objects with "name", "attributes", "methods",
 - "entities": list of object names,
 - "user_roles": list of strings,
-- "dependencies": list of strings.
+- "dependencies": list of strings,
+- "key_workflows": list of strings describing main lifecycles, states, or execution flows.
 
 Do not include any extra text. Output only the JSON."""),
         ("user", "Repository Tree:\n{tree}\n\nSample File Contents:\n{contents}")
@@ -139,7 +140,8 @@ Do not include any extra text. Output only the JSON."""),
                 "classes": [],
                 "entities": [],
                 "user_roles": [],
-                "dependencies": []
+                "dependencies": [],
+                "key_workflows": []
             }
     for key in state["code_metadata"]:
         if isinstance(state["code_metadata"][key], str):
@@ -153,7 +155,7 @@ async def generate_diagrams(state: AgentState):
     
     # If no selection, generate all
     if not selected:
-        selected = ["Class_Diagram", "ER_Diagram", "Usecase_Diagram"]
+        selected = ["Class_Diagram", "ER_Diagram", "Usecase_Diagram", "State_Diagram"]
     
     diagrams = {}
     
@@ -242,6 +244,39 @@ flowchart LR
     User --> ViewData
     Admin --> ManageSystem
     Admin --> ViewData"""
+        },
+        "State_Diagram": {
+            "system": """Generate ONLY valid Mermaid stateDiagram-v2 code representing the core lifecycle, execution stages, or state machine of the system.
+
+Rules:
+- Output Mermaid code only.
+- First line must be exactly:
+  stateDiagram-v2
+
+- Use [*] for start and end states:
+  [*] --> StateA
+  StateB --> [*]
+
+- Use valid state transitions with double-dash arrows:
+  StateA --> StateB : Trigger / Event Description
+
+- State identifiers must use alphanumeric characters and underscores only (no spaces or special characters in state names).
+- If state labels have spaces, define them using alias syntax:
+  state "Processing Request" as Processing_Request
+
+- Never generate:
+  - markdown fences (```)
+  - explanations or text outside the diagram
+  - single dash arrows (->)
+
+- Ensure the output strictly follows Mermaid state diagram syntax and renders without syntax errors.""",
+            "fallback": """stateDiagram-v2
+    [*] --> Initialized
+    Initialized --> Processing : Start
+    Processing --> Completed : Success
+    Processing --> Failed : Error
+    Failed --> Processing : Retry
+    Completed --> [*]"""
         }
     }
     
@@ -257,10 +292,12 @@ flowchart LR
             response = llm.invoke(messages)
             content = response.content.strip()
             content = strip_code_fences(content)
-            # Additional cleaning for class diagrams (optional)
+            # Additional cleaning for specific diagrams
             if name == "Class_Diagram":
                 # Remove duplicate class class, etc.
                 content = clean_class_diagram(content)
+            elif name == "State_Diagram":
+                content = clean_state_diagram(content)
             if not content or len(content) < 10:
                 print(f"   ⚠️ Empty response for {name}, using fallback")
                 content = config["fallback"]
@@ -296,6 +333,26 @@ def clean_class_diagram(code: str) -> str:
             cleaned.append(line)
     if not cleaned or cleaned[0] != 'classDiagram':
         cleaned.insert(0, 'classDiagram')
+    return '\n'.join(cleaned)
+
+def clean_state_diagram(code: str) -> str:
+    code = strip_code_fences(code)
+    lines = code.split('\n')
+    cleaned = []
+    has_header = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if 'stateDiagram' in stripped:
+            cleaned.append('stateDiagram-v2')
+            has_header = True
+            continue
+        # Convert single arrows to double arrows for state transitions (e.g., A -> B to A --> B)
+        fixed_line = re.sub(r'(?<=[^\-])->(?=[^\->])', '-->', stripped)
+        cleaned.append(fixed_line)
+    if not has_header:
+        cleaned.insert(0, 'stateDiagram-v2')
     return '\n'.join(cleaned)
 
 async def compile_report(state: AgentState):
@@ -432,7 +489,8 @@ async def run_agent_streaming(repo_url: str, diagram_types: Optional[List[str]] 
             final_state["diagrams"] = {
                 "Class_Diagram": "classDiagram\n    class Project {\n        +String name\n    }",
                 "ER_Diagram": "erDiagram\n    PROJECT ||--o{ MODULE : contains",
-                "Usecase_Diagram": "flowchart LR\n    User[User]\n    Admin[Admin]\n    ViewData((View Data))\n    User --> ViewData\n    Admin --> ViewData"
+                "Usecase_Diagram": "flowchart LR\n    User[User]\n    Admin[Admin]\n    ViewData((View Data))\n    User --> ViewData\n    Admin --> ViewData",
+                "State_Diagram": "stateDiagram-v2\n    [*] --> Initialized\n    Initialized --> Processing : Start\n    Processing --> Completed : Success\n    Processing --> Failed : Error\n    Failed --> Processing : Retry\n    Completed --> [*]"
             }
         if not final_state.get("final_report"):
             final_state["final_report"] = "Report could not be generated.\nPlease check the backend logs."
