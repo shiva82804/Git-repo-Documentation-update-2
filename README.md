@@ -55,6 +55,7 @@ Perfect for developers, technical writers, educators, and teams onboarding new m
 - **Class Diagrams**: Visualize OOP structure with relationships
 - **ER Diagrams**: Database schema and entity relationships
 - **Use Case Diagrams**: Actor interactions and system flows
+- **State Diagrams**: Dynamic system lifecycles, states, and event-driven transitions
 - All diagrams generated in **Mermaid** format for easy integration
 
 ### 📝 **Comprehensive Documentation**
@@ -117,7 +118,7 @@ GitGen AI uses a **multi-agent LangGraph workflow** with the following pipeline:
 ```
 1. fetch_context    → Clone repo & extract file tree
 2. analyze_code     → Extract metadata using Cohere LLM
-3. generate_diagrams → Create Mermaid diagrams (Class, ER, Use Case)
+3. generate_diagrams → Create Mermaid diagrams (Class, ER, Use Case, State)
 4. compile_report   → Generate comprehensive markdown report
 5. export_files     → Produce PDF and TXT outputs
 ```
@@ -361,7 +362,7 @@ Contributions are welcome! Here's how you can help:
 
 ### **Ideas for Contributions**
 - Support for private repositories (GitHub token authentication)
-- Additional diagram types (Sequence, State, Deployment)
+- Additional diagram types (Sequence, Deployment)
 - Support for GitLab, Bitbucket, and other platforms
 - Enhanced chat with code snippet highlighting
 - Multi-language support (currently English-focused)

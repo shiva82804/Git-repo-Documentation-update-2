@@ -33,8 +33,9 @@ const DiagramViewer = ({ diagrams }) => {
     const render = async () => {
       try {
         containerRef.current.innerHTML = '';
+        const cleanId = `mermaid-${activeTab.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now()}`;
         const { svg } = await mermaid.render(
-          `mermaid-${activeTab}`,
+          cleanId,
           diagrams[activeTab]
         );
         containerRef.current.innerHTML = svg;
@@ -82,7 +83,7 @@ const DiagramViewer = ({ diagrams }) => {
             className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab.replace('_', ' ')}
+            {tab.replace(/_/g, ' ')}
           </button>
         ))}
       </div>
