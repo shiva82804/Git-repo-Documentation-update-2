@@ -12,7 +12,7 @@ const RepoInput = ({ onSubmit, onRoadmap, isLoading, isRoadmapLoading, repoUrl }
     <div className="card" style={{ marginBottom: '24px' }}>
       <h1>📦 DocGen AI</h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>
-        Generate documentation, class diagrams, ER diagrams, state diagrams, and flowcharts from any GitHub repo.
+        Generate documentation, class diagrams, ER diagrams, state diagrams, sequence diagrams, and flowcharts from any GitHub repo.
       </p>
       <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
         <input

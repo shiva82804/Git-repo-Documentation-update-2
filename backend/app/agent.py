@@ -110,7 +110,8 @@ async def analyze_code(state: AgentState):
 - "entities": list of object names,
 - "user_roles": list of strings,
 - "dependencies": list of strings,
-- "key_workflows": list of strings describing main lifecycles, states, or execution flows.
+- "key_workflows": list of strings describing main lifecycles, states, or execution flows,
+- "call_sequences": list of objects with "caller", "callee", "action", "response" describing core runtime interactions between components or services.
 
 Do not include any extra text. Output only the JSON."""),
         ("user", "Repository Tree:\n{tree}\n\nSample File Contents:\n{contents}")
@@ -141,7 +142,8 @@ Do not include any extra text. Output only the JSON."""),
                 "entities": [],
                 "user_roles": [],
                 "dependencies": [],
-                "key_workflows": []
+                "key_workflows": [],
+                "call_sequences": []
             }
     for key in state["code_metadata"]:
         if isinstance(state["code_metadata"][key], str):
@@ -155,7 +157,7 @@ async def generate_diagrams(state: AgentState):
     
     # If no selection, generate all
     if not selected:
-        selected = ["Class_Diagram", "ER_Diagram", "Usecase_Diagram", "State_Diagram"]
+        selected = ["Class_Diagram", "ER_Diagram", "Usecase_Diagram", "State_Diagram", "Sequence_Diagram"]
     
     diagrams = {}
     
@@ -197,6 +199,18 @@ Rules:
 
 - Multiplicities must be quoted:
   User "1" --> "*" Review
+
+- In relationships, NEVER put quotes around class names or dependencies:
+  WRONG: Agent --> "uvicorn"
+  WRONG: Agent --> "fastapi"
+  CORRECT: Agent --> uvicorn
+  CORRECT: Agent --> fastapi
+
+- Target and source of relationships MUST be bare alphanumeric identifiers (A-Z, a-z, 0-9, _). No quotes, dashes, dots, or slashes.
+- Generic types inside class definitions MUST use tildes, NOT angle brackets:
+  CORRECT: List~String~
+  WRONG: List<String>
+- Each relationship must be on its own line.
 
 - Ensure the output renders successfully in Mermaid Live Editor without any syntax errors.""",
             "fallback": """classDiagram
@@ -277,6 +291,55 @@ Rules:
     Processing --> Failed : Error
     Failed --> Processing : Retry
     Completed --> [*]"""
+        },
+        "Sequence_Diagram": {
+            "system": """Generate ONLY valid Mermaid sequenceDiagram code representing the core runtime execution flow, API request cycle, or interaction sequence between key participants.
+
+Rules:
+- Output Mermaid code only.
+- First line must be exactly:
+  sequenceDiagram
+
+- Optionally include autonumber on the next line.
+- Explicitly declare participants or actors:
+  actor User
+  participant Client as Client Application
+  participant API as API Server
+  participant DB as Database
+
+- Use standard Mermaid message arrows:
+  ->> for synchronous calls / requests (solid line with arrow head)
+  -->> for responses / returns (dotted line with arrow head)
+  -) for asynchronous messages
+
+- Group interactions with valid blocks if relevant:
+  opt Optional Flow
+      Client->>API: Additional Data
+  end
+  alt Success Case
+      API-->>Client: 200 OK
+  else Error Case
+      API-->>Client: Error Response
+  end
+
+- Never generate:
+  - markdown fences (```)
+  - explanations or conversational text
+  - invalid arrow tokens like -> or =>
+
+- Ensure the output strictly follows Mermaid sequence diagram syntax and renders without syntax errors.""",
+            "fallback": """sequenceDiagram
+    autonumber
+    actor User
+    participant Client as Client App
+    participant Server as Backend Server
+    participant DB as Database
+    User->>Client: Initiate Request
+    Client->>Server: API Request
+    Server->>DB: Query Data
+    DB-->>Server: Return Data
+    Server-->>Client: JSON Response
+    Client-->>User: Render View"""
         }
     }
     
@@ -298,6 +361,8 @@ Rules:
                 content = clean_class_diagram(content)
             elif name == "State_Diagram":
                 content = clean_state_diagram(content)
+            elif name == "Sequence_Diagram":
+                content = clean_sequence_diagram(content)
             if not content or len(content) < 10:
                 print(f"   ⚠️ Empty response for {name}, using fallback")
                 content = config["fallback"]
@@ -310,29 +375,107 @@ Rules:
     state["diagrams"] = diagrams
     return state
 
-# (Include the clean_class_diagram helper function here – paste from earlier, or just use a simple version)
+def clean_class_rel_operand(operand: str) -> str:
+    operand = operand.strip()
+    if not operand:
+        return ""
+    # Case: "Multiplicity" ClassName (e.g. "*" Review or "1" "Review")
+    m = re.match(r'^(".*?"|\'.*?\')\s+(.+)$', operand)
+    if m:
+        mult = m.group(1)
+        cls_name = re.sub(r'[^a-zA-Z0-9_]', '_', m.group(2).strip(' "\''))
+        if not cls_name:
+            cls_name = "UnknownClass"
+        return f'{mult} {cls_name}'
+    
+    # Case: ClassName "Multiplicity" (e.g. User "1" or "User" "1")
+    m = re.match(r'^(.+?)\s+(".*?"|\'.*?\')$', operand)
+    if m:
+        cls_name = re.sub(r'[^a-zA-Z0-9_]', '_', m.group(1).strip(' "\''))
+        mult = m.group(2)
+        if not cls_name:
+            cls_name = "UnknownClass"
+        return f'{cls_name} {mult}'
+    
+    # Case: Single token, possibly quoted (e.g. "uvicorn" or 'fastapi' or Agent)
+    bare = operand.strip(' "\'')
+    safe = re.sub(r'[^a-zA-Z0-9_]', '_', bare)
+    if not safe:
+        safe = "UnknownClass"
+    return safe
+
 def clean_class_diagram(code: str) -> str:
-    # Simple cleaning: remove markdown fences, sanitize class names
     code = strip_code_fences(code)
+    # Replace generics <T> with ~T~
+    code = re.sub(r'<([a-zA-Z0-9_, ]+)>', r'~\1~', code)
+    
+    # Split multiple relationship statements on a single line if concatenated
+    arrow_syms = r'(?:<\|--|--\|>|\*--|--\*|o--|--o|-->|<--|\.\.>|<\.\.|\.\.\|>|<\|\.\.|--|\.\.)'
+    code = re.sub(r'("|\b[A-Za-z0-9_]+)\s*([A-Za-z0-9_]+\s*' + arrow_syms + r')', r'\1\n\2', code)
+    
     lines = code.split('\n')
     cleaned = []
+    has_header = False
+    arrow_pattern = re.compile(r'(\s*' + arrow_syms + r'\s*)')
+
     for line in lines:
         stripped = line.strip()
+        if not stripped:
+            continue
+        
+        # Check header
+        if stripped.lower().startswith('classdiagram'):
+            if not has_header:
+                cleaned.append('classDiagram')
+                has_header = True
+            continue
+        
+        # Remove trailing semicolon
+        if stripped.endswith(';'):
+            stripped = stripped[:-1].strip()
+        
+        # Fix "class class Name" -> "class Name"
+        stripped = re.sub(r'^class\s+class\s+', 'class ', stripped)
+        
+        # If line starts with "class "
         if stripped.startswith('class '):
-            parts = stripped.split(' ')
+            stripped = re.sub(r'\{\s*\}', '', stripped).strip()
+            parts = stripped.split()
             if len(parts) >= 2:
                 name_part = parts[1].strip('"').strip("'")
                 safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', name_part)
-                new_line = f"class {safe_name}"
-                if len(parts) > 2:
-                    new_line += " " + " ".join(parts[2:])
-                cleaned.append(new_line)
+                rest = " " + " ".join(parts[2:]) if len(parts) > 2 else ""
+                cleaned.append(f"    class {safe_name}{rest}")
             else:
-                cleaned.append(line)
-        else:
-            cleaned.append(line)
-    if not cleaned or cleaned[0] != 'classDiagram':
+                cleaned.append(f"    {stripped}")
+            continue
+        
+        # If line contains a relationship arrow
+        if arrow_pattern.search(stripped):
+            if ':' in stripped:
+                rel_part, label_part = stripped.split(':', 1)
+                label_suffix = f" : {label_part.strip()}"
+            else:
+                rel_part = stripped
+                label_suffix = ""
+            
+            arrow_match = arrow_pattern.search(rel_part)
+            if arrow_match:
+                left_raw = rel_part[:arrow_match.start()].strip()
+                arrow = arrow_match.group(1).strip()
+                right_raw = rel_part[arrow_match.end():].strip()
+                
+                left_cleaned = clean_class_rel_operand(left_raw)
+                right_cleaned = clean_class_rel_operand(right_raw)
+                
+                cleaned.append(f"    {left_cleaned} {arrow} {right_cleaned}{label_suffix}")
+                continue
+        
+        cleaned.append("    " + stripped if not stripped.startswith(' ') else stripped)
+    
+    if not has_header:
         cleaned.insert(0, 'classDiagram')
+    
     return '\n'.join(cleaned)
 
 def clean_state_diagram(code: str) -> str:
@@ -353,6 +496,29 @@ def clean_state_diagram(code: str) -> str:
         cleaned.append(fixed_line)
     if not has_header:
         cleaned.insert(0, 'stateDiagram-v2')
+    return '\n'.join(cleaned)
+
+def clean_sequence_diagram(code: str) -> str:
+    code = strip_code_fences(code)
+    lines = code.split('\n')
+    cleaned = []
+    has_header = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.lower().startswith('sequencediagram'):
+            if not has_header:
+                cleaned.append('sequenceDiagram')
+                has_header = True
+            continue
+        # Convert single dash arrow (e.g. A -> B : msg) to valid double-arrow (A ->> B : msg)
+        fixed_line = re.sub(r'(?<=[^\-])->(?=[^\->>])', '->>', stripped)
+        # Convert => or ==> to ->>
+        fixed_line = re.sub(r'={1,2}>', '->>', fixed_line)
+        cleaned.append(fixed_line)
+    if not has_header:
+        cleaned.insert(0, 'sequenceDiagram')
     return '\n'.join(cleaned)
 
 async def compile_report(state: AgentState):
@@ -490,7 +656,8 @@ async def run_agent_streaming(repo_url: str, diagram_types: Optional[List[str]] 
                 "Class_Diagram": "classDiagram\n    class Project {\n        +String name\n    }",
                 "ER_Diagram": "erDiagram\n    PROJECT ||--o{ MODULE : contains",
                 "Usecase_Diagram": "flowchart LR\n    User[User]\n    Admin[Admin]\n    ViewData((View Data))\n    User --> ViewData\n    Admin --> ViewData",
-                "State_Diagram": "stateDiagram-v2\n    [*] --> Initialized\n    Initialized --> Processing : Start\n    Processing --> Completed : Success\n    Processing --> Failed : Error\n    Failed --> Processing : Retry\n    Completed --> [*]"
+                "State_Diagram": "stateDiagram-v2\n    [*] --> Initialized\n    Initialized --> Processing : Start\n    Processing --> Completed : Success\n    Processing --> Failed : Error\n    Failed --> Processing : Retry\n    Completed --> [*]",
+                "Sequence_Diagram": "sequenceDiagram\n    autonumber\n    actor User\n    participant Client as Client App\n    participant Server as Backend Server\n    participant DB as Database\n    User->>Client: Send Request\n    Client->>Server: Forward Request\n    Server->>DB: Query Data\n    DB-->>Server: Data Returned\n    Server-->>Client: Respond\n    Client-->>User: Display"
             }
         if not final_state.get("final_report"):
             final_state["final_report"] = "Report could not be generated.\nPlease check the backend logs."
