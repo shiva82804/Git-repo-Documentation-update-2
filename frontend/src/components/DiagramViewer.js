@@ -15,6 +15,61 @@ mermaid.initialize({
   },
 });
 
+const sanitizeMermaidCode = (tabName, rawCode) => {
+  if (!rawCode) return '';
+  let code = rawCode.trim();
+  code = code.replace(/^```(?:mermaid)?/i, '').replace(/```$/i, '').trim();
+
+  // Class diagram cleaning
+  if (tabName === 'Class_Diagram' || code.startsWith('classDiagram')) {
+    // Replace generics <T> with ~T~
+    code = code.replace(/<([a-zA-Z0-9_, ]+)>/g, '~$1~');
+
+    // Split multiple statements if on a single line
+    const arrowSyms = '(?:<\\|--|--\\|>|\\*--|--\\*|o--|--o|-->|<--|\\.\\.>|<\\.\\.|\\.\\.\\|>|<\\|\\.\\.|--|\\.\\.)';
+    code = code.replace(new RegExp('("|[a-zA-Z0-9_]+)\\s*([a-zA-Z0-9_]+\\s*' + arrowSyms + ')', 'g'), '$1\n$2');
+
+    const arrowRegex = /(\s*(?:<\|--|--\|>|\*--|--\*|o--|--o|-->|<--|\.\.>|<\.\.|\.\.\|>|<\|\.\.|--|\.\.)\s*)/;
+    const lines = code.split('\n');
+    const cleanedLines = [];
+
+    for (let line of lines) {
+      let trimmed = line.trim();
+      if (!trimmed) continue;
+      if (arrowRegex.test(trimmed)) {
+        let [relPart, ...labelParts] = trimmed.split(':');
+        let labelSuffix = labelParts.length > 0 ? ` : ${labelParts.join(':').trim()}` : '';
+
+        const match = relPart.match(arrowRegex);
+        if (match) {
+          const arrow = match[1].trim();
+          let left = relPart.substring(0, match.index).trim();
+          let right = relPart.substring(match.index + match[0].length).trim();
+
+          // If right is quoted identifier e.g. "uvicorn" -> uvicorn
+          const rightMatch = right.match(/^["']([^"']+)["']$/);
+          if (rightMatch) {
+            right = rightMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
+          }
+
+          // If left is quoted identifier e.g. "Agent" -> Agent
+          const leftMatch = left.match(/^["']([^"']+)["']$/);
+          if (leftMatch) {
+            left = leftMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
+          }
+
+          cleanedLines.push(`    ${left} ${arrow} ${right}${labelSuffix}`);
+          continue;
+        }
+      }
+      cleanedLines.push(line);
+    }
+    code = cleanedLines.join('\n');
+  }
+
+  return code;
+};
+
 const DiagramViewer = ({ diagrams }) => {
   const [activeTab, setActiveTab] = useState(null);
   const [showCode, setShowCode] = useState(false);
@@ -34,9 +89,10 @@ const DiagramViewer = ({ diagrams }) => {
       try {
         containerRef.current.innerHTML = '';
         const cleanId = `mermaid-${activeTab.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now()}`;
+        const cleanCode = sanitizeMermaidCode(activeTab, diagrams[activeTab]);
         const { svg } = await mermaid.render(
           cleanId,
-          diagrams[activeTab]
+          cleanCode
         );
         containerRef.current.innerHTML = svg;
       } catch (error) {
@@ -61,7 +117,7 @@ const DiagramViewer = ({ diagrams }) => {
   }
 
   const tabs = Object.keys(diagrams);
-  const currentCode = activeTab ? diagrams[activeTab] : '';
+  const currentCode = activeTab ? sanitizeMermaidCode(activeTab, diagrams[activeTab]) : '';
 
   return (
     <div className="card" style={{ marginBottom: '24px' }}>

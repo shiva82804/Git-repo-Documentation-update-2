@@ -33,7 +33,7 @@ GitGen AI addresses the common challenge of maintaining up-to-date documentation
 
 - Clones and analyzes any public GitHub repository
 - Extracts code metadata, classes, entities, and dependencies
-- Generates UML diagrams (Class, ER, Use Case)
+- Generates UML diagrams (Class, ER, Use Case, State, Sequence)
 - Creates comprehensive project reports with gap analysis
 - Builds personalized learning roadmaps
 - Provides RAG-based Q&A for deep codebase understanding
@@ -56,6 +56,7 @@ Perfect for developers, technical writers, educators, and teams onboarding new m
 - **ER Diagrams**: Database schema and entity relationships
 - **Use Case Diagrams**: Actor interactions and system flows
 - **State Diagrams**: Dynamic system lifecycles, states, and event-driven transitions
+- **Sequence Diagrams**: Interaction and runtime call flows between actors and components
 - All diagrams generated in **Mermaid** format for easy integration
 
 ### 📝 **Comprehensive Documentation**
@@ -118,7 +119,7 @@ GitGen AI uses a **multi-agent LangGraph workflow** with the following pipeline:
 ```
 1. fetch_context    → Clone repo & extract file tree
 2. analyze_code     → Extract metadata using Cohere LLM
-3. generate_diagrams → Create Mermaid diagrams (Class, ER, Use Case, State)
+3. generate_diagrams → Create Mermaid diagrams (Class, ER, Use Case, State, Sequence)
 4. compile_report   → Generate comprehensive markdown report
 5. export_files     → Produce PDF and TXT outputs
 ```
@@ -362,7 +363,7 @@ Contributions are welcome! Here's how you can help:
 
 ### **Ideas for Contributions**
 - Support for private repositories (GitHub token authentication)
-- Additional diagram types (Sequence, Deployment)
+- Additional diagram types (Deployment, Component, Activity)
 - Support for GitLab, Bitbucket, and other platforms
 - Enhanced chat with code snippet highlighting
 - Multi-language support (currently English-focused)
